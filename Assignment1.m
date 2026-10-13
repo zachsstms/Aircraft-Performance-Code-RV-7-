@@ -176,8 +176,8 @@ figure
 plot(MAP_8000Sim,Range_8000Sim)
 hold on
 plot(MAP_6000Sim,Range_6000Sim)
-plot(MAP_8000R,Range_8000R)
-plot(MAP_6000R,Range_6000R)
+plot(MAP_8000R,Range_8000R,'o')
+plot(MAP_6000R,Range_6000R,'o')
 xlabel('Manifold Presusre [inHg]')
 ylabel('Range [nm]')
 legend('Model, Alt = 8000','Model, Alt = 6000','POH Altitude = 8000','POH Altitude = 6000','Location','best')
@@ -187,8 +187,8 @@ figure
 plot(MAP_8000Sim,Endurance_8000Sim)
 hold on
 plot(MAP_6000Sim,Endurance_6000Sim)
-plot(MAP_8000R,Endurance_8000R)
-plot(MAP_6000R,Endurance_6000R)
+plot(MAP_8000R,Endurance_8000R,'o')
+plot(MAP_6000R,Endurance_6000R,'o')
 xlabel('Manifold Presusre [inHg]')
 ylabel('Endurance [Hr]')
 legend('Model, Alt = 8000','Model, Alt = 6000','POH Altitude = 8000','POH Altitude = 6000','Location','best')
@@ -196,8 +196,7 @@ title('Endurance vs MAP')
 
 %% Build The Integrator
 % Steady Level Flight, Standard Day
-clear all
-clc
+
 % Plane Constants
 Area = 121; %sqft
 MTOW = 1800; %lbs
@@ -208,6 +207,7 @@ CargoW = 99.208; %lbs
 PassengerW = 287; %lbs to get to about MTOW
 PayloadW = CargoW + PassengerW;
 
+tic
 % Hold Alt and Map Constant
 altitude = 6000;
 
@@ -247,13 +247,13 @@ Power_history = [];
 CL_history = [];
 CD_history = [];
 Distance_history = [];
+Eta_history = [];
 
 % Initial TAS guess
 TAS_current = 120;   % knots
 
 % Time Marching Loop
 while CurrentFuelW > 0
-
     % Current Aircraft Weight
     Weight = EmptyW + PayloadW + CurrentFuelW;
 
@@ -264,7 +264,7 @@ while CurrentFuelW > 0
     % Solve T = D using previous TAS as the initial guess
    TAS_current = fzero(fun,TAS_current);
 
-[~,Thrust,Drag,FuelFlow,Power,CL,CD,RPM,FuelConsumption] = thrust_drag_difference(TAS_current,Weight,MAP,altitude,TempF,Density,Area,Cdfunc);
+[~,Thrust,Drag,FuelFlow,Power,CL,CD,RPM,FuelConsumption,Eta] = thrust_drag_difference(TAS_current,Weight,MAP,altitude,TempF,Density,Area,Cdfunc);
     % Convert TAS to ft/s
     Velocity = TAS_current * 1.68781;
 
@@ -285,7 +285,7 @@ while CurrentFuelW > 0
     CL_history(end+1) = CL;
     CD_history(end+1) = CD;
     Distance_history(end+1) = Distance;
-
+    Eta_history(end+1) = Eta;
     % Update fuel
     CurrentFuelW = CurrentFuelW - FuelBurned;
 
@@ -302,48 +302,197 @@ fprintf('\n--- Final Results ---\n')
 fprintf('Flight Time = %.2f min\n',t/60)
 fprintf('Distance = %.2f nautical miles\n',Distance/6076.12) %converts ft to nm
 fprintf('Fuel Remaining = %.2f lb\n',CurrentFuelW)
-
+toc;
 % Plot Results
 
-figure
-plot(Time_history/60,TAS_history)
-xlabel('Time (min)')
-ylabel('TAS (knots)')
-title('True Airspeed vs Time')
-grid on
+% figure
+% plot(Time_history/60,TAS_history)
+% xlabel('Time (min)')
+% ylabel('TAS (knots)')
+% title('True Airspeed vs Time')
+% grid on
+% 
+% figure
+% plot(Time_history/60,Fuel_history)
+% xlabel('Time (min)')
+% ylabel('Fuel Remaining (lb)')
+% title('Fuel Remaining vs Time')
+% grid on
+% 
+% figure
+% plot(Time_history/60,Weight_history)
+% xlabel('Time (min)')
+% ylabel('Aircraft Weight (lb)')
+% title('Aircraft Weight vs Time')
+% grid on
+% 
+% figure
+% plot(Time_history/60,Distance_history/6076.12)
+% xlabel('Time (min)')
+% ylabel('Distance (NM)')
+% title('Distance vs Time')
+% grid on
+% 
+% figure
+% plot(Time_history/60,CD_history)
+% xlabel('Time (min)')
+% ylabel('Drag (lbf)')
+% title('Drag vs Time')
+% grid on
+% 
+% plot(TAS_history,Power_history)
+% xlabel('Time (min)')
+% ylabel('Power hp)')
+% title('Power vs Time')
+% grid on
 
-figure
-plot(Time_history/60,Fuel_history)
-xlabel('Time (min)')
-ylabel('Fuel Remaining (lb)')
-title('Fuel Remaining vs Time')
-grid on
+%% DELTA T INTEGRATOR
+% Plane Constants
+Area = 121; %sqft
+MTOW = 1800; %lbs
+% Usable Fuel 
+FuelW = 244.8; %lbs Usable Fuel
+EmptyW = 1168.45; %lbs
+CargoW = 99.208; %lbs
+PassengerW = 287; %lbs to get to about MTOW
+PayloadW = CargoW + PassengerW;
 
-figure
-plot(Time_history/60,Weight_history)
-xlabel('Time (min)')
-ylabel('Aircraft Weight (lb)')
-title('Aircraft Weight vs Time')
-grid on
+tic
+% Hold Alt and Map Constant
 
-figure
-plot(Time_history/60,Distance_history/6076.12)
-xlabel('Time (min)')
-ylabel('Distance (NM)')
-title('Distance vs Time')
-grid on
+Cdfunc = @(CL) 0.024292 + 1.6647e-9*CL + 0.071696*CL^2;
 
-figure
-plot(Time_history/60,Drag_history)
-xlabel('Time (min)')
-ylabel('Drag (lbf)')
-title('Drag vs Time')
-grid on
+altrange15 = [6000,8000,10000];
+Density15 = [.0019288,.00181301,.00170262];
+TempF15 = [52.6,45.5,38.3];
+Densitysub15 = [.00204878,0.00192749,0.001811760];
+TempFsub15 = [22.6,15.5,8.3];
 
+ALTRANGE = [altrange15,altrange15];
+TempFrange = [TempF15,TempFsub15];
+DensityRange = [Density15,Densitysub15];
+
+MAP = 24.6;
+Time_historyT = [];
+Fuel_historyT = [];
+Weight_historyT = [];
+TAS_historyT = [];
+Thrust_historyT = [];
+Drag_historyT = [];
+Power_historyT = [];
+CL_historyT = [];
+CD_historyT = [];
+Distance_historyT = [];
+Eta_historyT = [];
+for i = 1:length(ALTRANGE)
+    altitude = ALTRANGE(i);
+    Density = DensityRange(i);
+    TempF = TempFrange(i);
+% Tolerance of Steady lvl Flight
+tolerance = 1; %lbf
+TASRANGE = linspace(30,200,1000);
+
+% Time Integration
+t = 0;
+dt = 30; %seconds
+Distance = 0; % ft
+
+% TAS search limits
+TASmin = 30;            % knots
+TASmax = 200;           % knots
+
+% Current Fuel
+CurrentFuelW = FuelW;
+
+% Results arrays
+
+
+% Initial TAS guess
+TAS_current = 120;   % knots
+j = 1;
+% Time Marching Loop
+while CurrentFuelW > 0
+
+    % Current Aircraft Weight
+    Weight = EmptyW + PayloadW + CurrentFuelW;
+
+    % Function for T - D
+    fun = @(TAS) thrust_drag_difference( ...
+        TAS,Weight,MAP,altitude,TempF,Density,Area,Cdfunc);
+
+    % Solve T = D using previous TAS as the initial guess
+   TAS_current = fzero(fun,TAS_current);
+
+[~,Thrust,Drag,FuelFlow,Power,CL,CD,RPM,FuelConsumption,Eta] = thrust_drag_difference(TAS_current,Weight,MAP,altitude,TempF,Density,Area,Cdfunc);
+    % Convert TAS to ft/s
+    Velocity = TAS_current * 1.68781;
+
+    % Fuel burned
+    FuelBurned = FuelFlow/3600 * dt;
+
+    % Distance traveled
+    Distance = Distance + Velocity*dt;
+
+    % Save results
+    Time_historyT(i,j) = t;
+    Fuel_historyT(i,j) = CurrentFuelW;
+    Weight_historyT(i,j) = Weight;
+    TAS_historyT(i,j) = TAS_current;
+    Thrust_historyT(i,j) = Thrust;
+    Drag_historyT(i,j) = Drag;
+    Power_historyT(i,j) = Power;
+    CL_historyT(i,j) = CL;
+    CD_historyT(i,j) = CD;
+    Distance_historyT(i,j) = Distance;
+    Eta_historyT(i,j) = Eta;
+    % Update fuel
+    CurrentFuelW = CurrentFuelW - FuelBurned;
+j = j+1;
+    if CurrentFuelW < 0
+        CurrentFuelW = 0;
+    end
+
+    % Update time
+    t = t + dt;
+end
+
+% Replace zero values with NaN in delta-temperature histories
+Fuel_historyT(Fuel_historyT == 0) = NaN;
+Weight_historyT(Weight_historyT == 0) = NaN;
+TAS_historyT(TAS_historyT == 0) = NaN;
+Thrust_historyT(Thrust_historyT == 0) = NaN;
+Drag_historyT(Drag_historyT == 0) = NaN;
+Power_historyT(Power_historyT == 0) = NaN;
+CL_historyT(CL_historyT == 0) = NaN;
+CD_historyT(CD_historyT == 0) = NaN;
+Distance_historyT(Distance_historyT == 0) = NaN;
+Eta_historyT(Eta_historyT == 0) = NaN;
+% Keep the first zero in each row; replace subsequent zeros with NaN
+for i = 1:size(Time_historyT,1)
+    zeroIndices = find(Time_historyT(i,:) == 0);
+    if length(zeroIndices) > 1
+        Time_historyT(i,zeroIndices(2:end)) = NaN;
+    end
+end
+
+
+
+
+
+
+
+% Display Final Results
+fprintf('\n--- Final Results ---\n')
+fprintf('Altitude = %.2f ft\n',altitude)
+fprintf('Temperature = %.2f F\n',TempF)
+fprintf('Flight Time = %.2f min\n',t/60)
+fprintf('Distance = %.2f nautical miles\n',Distance/6076.12) %converts ft to nm
+%fprintf('Fuel Remaining = %.2f lb\n',CurrentFuelW)
+toc;
+end
 % FUNCTION: Calculate Aircraft Performance and T-D
-function [difference,Thrust,Drag,FuelFlow,Power,CL,CD,RPM,FuelConsumption] = ...
-    thrust_drag_difference( ...
-    TAS,Weight,MAP,altitude,TempF,Density,Area,Cdfunc)
+function [difference,Thrust,Drag,FuelFlow,Power,CL,CD,RPM,FuelConsumption,Eta] = ...
+    thrust_drag_difference(TAS,Weight,MAP,altitude,TempF,Density,Area,Cdfunc)
 
     % Propeller model
     y = engine_propeller(MAP,TAS,altitude,TempF);
@@ -370,4 +519,189 @@ function [difference,Thrust,Drag,FuelFlow,Power,CL,CD,RPM,FuelConsumption] = ...
     % Thrust - Drag
     difference = Thrust - Drag;
     FuelConsumption = y.FuelConsumption;
+    % Efficiency
+    Eta = y.Eta;
 end
+
+%% Plot Standard Day vs. Delta Temperature
+
+%% Plot Standard Day vs. Delta Temperature Conditions
+
+LegendLabels = {'6000 ft Hot (+15 F)', ...
+    '8000 ft Hot (+15 F)', ...
+    '10000 ft Hot (+15 F)', ...
+    '6000 ft Cold (-15 F)', ...
+    '8000 ft Cold (-15 F)', ...
+    '10000 ft Cold (-15 F)', ...
+    'Standard Day'};
+
+% 1. True Airspeed vs Time
+figure
+hold on
+for i = 1:size(TAS_historyT,1)
+    plot(Time_historyT(i,:)/60, TAS_historyT(i,:),  ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, TAS_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('TAS (knots)')
+title('True Airspeed vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 2. Fuel Remaining vs Time
+figure
+hold on
+for i = 1:size(Fuel_historyT,1)
+    plot(Time_historyT(i,:)/60, Fuel_historyT(i,:),  ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, Fuel_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('Fuel Remaining (lb)')
+title('Fuel Remaining vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 3. Aircraft Weight vs Time
+figure
+hold on
+for i = 1:size(Weight_historyT,1)
+    plot(Time_historyT(i,:)/60, Weight_historyT(i,:), ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, Weight_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('Aircraft Weight (lb)')
+title('Aircraft Weight vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 4. Distance vs Time
+figure
+hold on
+for i = 1:size(Distance_historyT,1)
+    plot(Time_historyT(i,:)/60, Distance_historyT(i,:)/6076.12,  ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, Distance_history/6076.12, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('Distance (NM)')
+title('Distance vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 5. Drag vs Time
+figure
+hold on
+for i = 1:size(Drag_historyT,1)
+    plot(Time_historyT(i,:)/60, Drag_historyT(i,:),  ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, Drag_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('Drag (lbf)')
+title('Drag vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 6. Power vs TAS
+figure
+hold on
+for i = 1:size(Power_historyT,1)
+    plot(TAS_historyT(i,:), Power_historyT(i,:), ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(TAS_history, Power_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('TAS (knots)')
+ylabel('Power (hp)')
+title('Power vs TAS')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 7. Lift Coefficient vs Time
+figure
+hold on
+for i = 1:size(CL_historyT,1)
+    plot(Time_historyT(i,:)/60, CL_historyT(i,:), ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, CL_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('C_L')
+title('Lift Coefficient vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 8. Drag Coefficient vs Time
+figure
+hold on
+for i = 1:size(CD_historyT,1)
+    plot(Time_historyT(i,:)/60, CD_historyT(i,:), ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, CD_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('C_D')
+title('Drag Coefficient vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+% 9. Propeller Efficiency vs Time
+figure
+hold on
+for i = 1:size(Eta_historyT,1)
+    plot(Time_historyT(i,:)/60, Eta_historyT(i,:), ...
+        'LineWidth', 1, 'MarkerSize', 3)
+end
+plot(Time_history/60, Eta_history, 'k-', ...
+    'LineWidth', 2, 'MarkerSize', 6, 'MarkerFaceColor', 'k')
+xlabel('Time (min)')
+ylabel('Propeller Efficiency')
+title('Propeller Efficiency vs Time')
+legend(LegendLabels, 'Location', 'best')
+grid on
+hold off
+
+
+%% Save All Figures Automatically
+
+% Folder to save figures
+SaveFolder = 'Aircraft_Performance_Graphs';
+
+% Create folder if it doesn't exist
+if ~exist(SaveFolder, 'dir')
+    mkdir(SaveFolder);
+end
+
+% Get all open figures
+Figures = findall(0, 'Type', 'figure');
+
+% Save each figure as a PNG
+for k = 1:length(Figures)
+    Fig = Figures(k);
+
+    % Save with sequential filenames
+    filename = fullfile(SaveFolder, ...
+        sprintf('Figure_%02d.png', k));
+
+    exportgraphics(Fig, filename, 'Resolution', 300);
+end
+
+fprintf('Saved %d figures to: %s\n', length(Figures), SaveFolder);
